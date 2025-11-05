@@ -6,7 +6,7 @@ SECTIONS
 
     .text : {
         KEEP(*(.text.boot))
-        *(.text.boot) 
+        *(.text.boot)
         *(.text*) 
     }
 
