@@ -1,3 +1,7 @@
+comptime {
+    _ = @import("entry.zig");
+}
+
 inline fn csrWrite(comptime csr: []const u8, value: anytype) void {
     _ = asm volatile ("csrw " ++ csr ++ ", %[value]"
         :
@@ -61,15 +65,6 @@ fn sbiSetTimer(value: u64) void {
     sbiCall1(SBI_TIME, SBI_TIME_SET_TIMER, value);
 }
 
-export fn _start() linksection(".text.boot") callconv(.naked) void {
-    asm volatile (
-        \\    la sp, __stack_start
-        \\    call entry
-        \\1:  wfi
-        \\    j 1b
-    );
-}
-
 fn interrupt_handler() callconv(.{ .riscv64_interrupt = .{ .mode = .supervisor } }) void {
     csrClear("sip", 32);
     sbiSetTimer(readTime() + 10000000);
@@ -77,11 +72,7 @@ fn interrupt_handler() callconv(.{ .riscv64_interrupt = .{ .mode = .supervisor }
     sbiDebugConsoleWrite("Timer!\n");
 }
 
-export fn entry() void {
-    main();
-}
-
-fn main() void {
+pub fn main() void {
     csrWrite("stvec", &interrupt_handler);
     csrSet("sstatus", 0x2);
 
