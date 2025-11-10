@@ -1,0 +1,17 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/debian
+{
+  "name": "Debian",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers-extra/features/zig:1": {
+      "version": "0.15.1"
+    }
+  },
+  "workspaceMount": "",
+  "runArgs": [
+    "--volume=.:/workspaces/kernel:Z"
+  ]
+}
