@@ -19,8 +19,18 @@ pub inline fn csrClear(comptime csr: []const u8, value: anytype) void {
     );
 }
 
+pub inline fn csrRead(comptime csr: []const u8) usize {
+    return asm volatile ("csrr %[ret]," ++ csr
+        : [ret] "=r" (-> usize),
+    );
+}
+
 pub inline fn readTime() usize {
     return asm volatile ("rdtime %[ret]"
         : [ret] "=r" (-> usize),
     );
+}
+
+pub inline fn sfenceVma() void {
+    asm volatile ("sfence.vma zero, zero");
 }

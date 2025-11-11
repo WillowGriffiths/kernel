@@ -1,14 +1,26 @@
 const util = @import("util.zig");
 const sbi = @import("sbi.zig");
+const pagetable = @import("pagetable.zig");
+const memory = @import("memory.zig");
+const console = @import("console.zig");
 
-extern const __virtual_start: anyopaque;
-pub var diff: u64 = undefined;
+pub export var memory_info: pagetable.MemoryInfo = undefined;
 
 fn interrupt_handler() align(4) callconv(.{ .riscv64_interrupt = .{ .mode = .supervisor } }) void {
-    util.csrClear("sip", 32);
-    sbi.sbiSetTimer(util.readTime() + 10000000);
+    const sip = util.csrRead("sip");
 
-    sbi.sbiDebugConsoleWrite("Timer!\n");
+    if ((sip >> 5) & 1 == 1) {
+        util.csrClear("sip", 32);
+        sbi.sbiSetTimer(util.readTime() + 10000000);
+        console.print("Timer!\n", .{});
+    } else {
+        console.print("Unknown interrupt encountered: 0b{b}! stopping.\n", .{sip});
+        util.csrClear("sie", 0x20);
+        util.csrClear("sip", 0x2);
+        while (true) {
+            asm volatile ("wfi");
+        }
+    }
 }
 
 fn enableInterrupts() void {
@@ -21,13 +33,13 @@ fn enableTimer() void {
     util.csrSet("sie", 0x20);
 }
 
-export fn main(kernel_start: u64) noreturn {
-    diff = @intFromPtr(&__virtual_start) - kernel_start;
-
+export fn main() noreturn {
     enableInterrupts();
     enableTimer();
 
-    sbi.sbiDebugConsoleWrite("waiting for interrupts...\n");
+    memory.setupMemory();
+
+    console.print("waiting for interrupts...\n", .{});
     while (true) {
         asm volatile ("wfi");
     }

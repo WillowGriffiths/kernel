@@ -29,6 +29,8 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addObject(entry);
     exe.setLinkerScript(b.path("linker.ld"));
 
+    b.installArtifact(exe);
+
     const run_command = b.addSystemCommand(&.{ "qemu-system-riscv64", "-s", "-machine", "virt", "-bios", "fw_dynamic.bin", "-serial", "stdio", "-kernel" });
     run_command.addArtifactArg(exe);
 
@@ -36,9 +38,17 @@ pub fn build(b: *std.Build) void {
         run_command.addArgs(args);
     }
 
-    b.installArtifact(exe);
+    const debug_command = b.addSystemCommand(&.{ "gdb", "-ex", "target rem :1234" });
+    debug_command.addArtifactArg(exe);
+
+    if (b.args) |args| {
+        debug_command.addArgs(args);
+    }
 
     const run_step = b.step("run", "Run the kernel in a VM");
     run_step.dependOn(&run_command.step);
     run_step.dependOn(b.getInstallStep());
+
+    const debug_step = b.step("debug", "Attach to the running kernel to debug it");
+    debug_step.dependOn(&debug_command.step);
 }

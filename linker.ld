@@ -16,7 +16,7 @@ SECTIONS
 
         . = ALIGN(4K);
         __boot_page_tables = .;
-        . += 4K * 5;
+        . += 4K * 10;
     }
 
     __boot_end = .;
@@ -51,7 +51,7 @@ SECTIONS
 
     .kstack : AT(. - DIFF) {
         . = ALIGN(16);
-        . += 4K;
+        . += 4K * 8;
         __stack_start = .;
     }
 
