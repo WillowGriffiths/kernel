@@ -15,6 +15,7 @@ At the moment, the boot process is as follows:
 - Next, a pagetable is created which maps virtual addresses from 0xffffffff80000000 to our main kernel code. This is at _negative_ 2GiB in two's complement.
 - Paging is enabled by writing a certain value into a CPU register then we return to the `_start` function to jump to our main kernel code in `main.zig`.
 - `main.zig` is where the main behaviour of the kernel happens. We enable interrupts on the current CPU core, initialising the `stvec` register to the address of our ISR. Then, we set up timer interrupts, and configure the timer to fire an interrupt a short period in the future.
+- In `memory.zig`, we initialise a buddy memory allocator which uses a binary tree to partition up and allocate memory.
 - We then enter into a loop of stalling the CPU to wait for interrupts. When an interrupt happens, the CPU jumps to the code in `interrupt_handler`. This clears the interrupt flag on the CPU so that a new interrupt can arrive, sets the timer to fire again 1 second into the future, and prints a message to the console.
 - That's about it! Printing to the console uses a function of the system firmware (quite like the BIOS on most systems) defined in sbi.zig.
 
