@@ -53,7 +53,7 @@ inline fn getFarAddr(comptime addr: []const u8) usize {
 fn init_kernel_pagetables() void {
     @setRuntimeSafety(false);
 
-    const kernel_start = @intFromPtr(&__kernel_start);
+    const boot_start = @intFromPtr(&__boot_start);
 
     const virtual_start = getFarAddr("__virtual_start");
 
@@ -64,7 +64,7 @@ fn init_kernel_pagetables() void {
     __boot_page_tables[3][level_1_index] = pagetable.PageTableEntry.create(.Table, @intFromPtr(&__boot_page_tables[4]));
 
     for (0..512) |i| {
-        const pa = kernel_start + i * 0x1000;
+        const pa = boot_start + i * 0x1000;
         const va = virtual_start + i * 0x1000;
         const level_0_index = (va >> 12) & 0b111111111;
 
@@ -96,6 +96,7 @@ export fn init_pagetables() void {
 
     asm volatile ("sfence.vma zero, zero");
 
+    const boot_start = @intFromPtr(&__boot_start);
     const kernel_start = @intFromPtr(&__kernel_start);
     const kernel_end = @intFromPtr(&__kernel_end);
     const virtual_start = getFarAddr("__virtual_start");
@@ -106,7 +107,7 @@ export fn init_pagetables() void {
         .virtual_start = virtual_start,
         .kernel_start = kernel_start,
         .kernel_pages = kernel_pages,
-        .virtual_diff = virtual_start - kernel_start,
-        .table_root = &__boot_page_tables[0],
+        .virtual_diff = virtual_start - boot_start,
+        .table_root = @alignCast(&__boot_page_tables[0]),
     };
 }

@@ -14,9 +14,14 @@ fn interrupt_handler() align(4) callconv(.{ .riscv64_interrupt = .{ .mode = .sup
         sbi.sbiSetTimer(util.readTime() + 10000000);
         console.print("Timer!\n", .{});
     } else {
-        console.print("Unknown interrupt encountered: 0b{b}! stopping.\n", .{sip});
         util.csrClear("sie", 0x20);
         util.csrClear("sip", 0x2);
+
+        console.print("Unknown interrupt encountered: 0b{b}! stopping.\n", .{sip});
+
+        sbi.sbiSystemReset(.Shutdown, .SystemFailure);
+
+        // if the shutdown fails
         while (true) {
             asm volatile ("wfi");
         }
@@ -29,7 +34,7 @@ fn enableInterrupts() void {
 }
 
 fn enableTimer() void {
-    sbi.sbiSetTimer(util.readTime() + 10000);
+    sbi.sbiSetTimer(util.readTime() + 10000000);
     util.csrSet("sie", 0x20);
 }
 

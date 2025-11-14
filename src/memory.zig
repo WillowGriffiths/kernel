@@ -37,12 +37,17 @@ const MemoryNode = struct {
 const min_allocation = 0x1000;
 const ram_start = 0x80000000;
 const ram_end = 0x87ffffff;
+const virtual_ram_start = 0xffffffd600000000;
 
 var root_table: *align(4096) pagetable.PageTable = undefined;
 var max_order: usize = undefined;
 var alloc_start: usize = undefined;
 var root_node: MemoryNodeChild = undefined;
 var memory_page: *align(4096) MemoryHeader = undefined;
+var virtual_diff: usize = undefined;
+
+extern const __virtual_end: anyopaque;
+extern const __virtual_kernel_start: anyopaque;
 
 pub fn buildInitialTree() void {
     const nodes = memory_page.getNodes();
@@ -118,7 +123,7 @@ fn makeAllocation(node: *MemoryNodeChild, order: usize, node_order: usize, addr:
     }
 }
 
-pub fn alloc(t: type) !*t {
+pub fn alloc(t: type) !*align(0x1000) t {
     const size = @sizeOf(t);
 
     var order: u6 = 0;
@@ -134,11 +139,115 @@ pub fn alloc(t: type) !*t {
     return @ptrFromInt(allocation orelse return AllocationError.AllocationFailed);
 }
 
-pub fn setupMemory() void {
-    alloc_start = root.memory_info.virtual_start + 0x1000 * root.memory_info.kernel_pages;
-    const alloc_start_physical = alloc_start - root.memory_info.virtual_diff;
+const MapError = error{
+    AlreadyMapped,
+    Unmapped,
+};
 
-    console.print("{x}\n", .{alloc_start_physical});
+fn makeTable() !*align(0x1000) pagetable.PageTable {
+    const table = try alloc(pagetable.PageTable);
+    for (0..table.len) |i| {
+        table[i].flags.valid = false;
+    }
+    return table;
+}
+
+fn getVAddr(pa: usize) *anyopaque {
+    // Relies on physical memory being mapped to a known place.
+    // Early on in initialisation, this is straight after the kernel code.
+    // After re-initialising paging, this becomes virtual_ram_start
+
+    return @ptrFromInt(
+        pa + virtual_diff,
+    );
+}
+
+fn getPAddr(addr: *anyopaque) usize {
+    const va = @intFromPtr(addr);
+
+    const level2_index = (va >> 30) & 0b111111111;
+    const level1_index = (va >> 21) & 0b111111111;
+    const level0_index = (va >> 12) & 0b111111111;
+    const offset = va & 0xfff;
+
+    const level1_addr = root_table[level2_index].get_addr();
+    const level1_table: *pagetable.PageTable = @ptrCast(@alignCast(getVAddr(level1_addr)));
+
+    const level0_addr = level1_table[level1_index].get_addr();
+    const level0_table: *pagetable.PageTable = @ptrCast(@alignCast(getVAddr(level0_addr)));
+
+    const base_addr = level0_table[level0_index].get_addr();
+    return base_addr + offset;
+}
+
+fn map(level2_table: *align(0x1000) pagetable.PageTable, va: usize, pa: usize) !void {
+    const level2_index = (va >> 30) & 0b111111111;
+    const level1_index = (va >> 21) & 0b111111111;
+    const level0_index = (va >> 12) & 0b111111111;
+
+    if (!level2_table[level2_index].flags.valid) {
+        const addr = getPAddr(try makeTable());
+        level2_table[level2_index] = pagetable.PageTableEntry.create(.Table, addr);
+    }
+
+    const level1_table: *pagetable.PageTable = @ptrCast(@alignCast(getVAddr(level2_table[level2_index].get_addr())));
+
+    if (!level1_table[level1_index].flags.valid) {
+        const addr = getPAddr(try makeTable());
+        level1_table[level1_index] = pagetable.PageTableEntry.create(.Table, addr);
+    }
+
+    const level0_table: *pagetable.PageTable = @ptrCast(@alignCast(getVAddr(level1_table[level1_index].get_addr())));
+    if (level0_table[level0_index].flags.valid) {
+        return MapError.AlreadyMapped;
+    }
+
+    level0_table[level0_index] = pagetable.PageTableEntry.create(.Leaf, pa);
+}
+
+fn setupPagetables() !void {
+    const table = try makeTable();
+
+    const virtual_kernel_start = @intFromPtr(&__virtual_kernel_start);
+    for (0..root.memory_info.kernel_pages) |i| {
+        const va = virtual_kernel_start + i * 0x1000;
+        const pa = root.memory_info.kernel_start + i * 0x1000;
+
+        try map(table, va, pa);
+    }
+
+    const ram_pages = (ram_end - ram_start) / 0x1000 + 1;
+    console.print("{x}\n", .{ram_pages});
+    for (0..ram_pages) |i| {
+        const va = virtual_ram_start + i * 0x1000;
+        const pa = ram_start + i * 0x1000;
+
+        if (i >= 200) {
+            asm volatile ("nop");
+        }
+
+        try map(table, va, pa);
+    }
+
+    util.sfenceVma();
+
+    const satp_sv39 = 8 << 60;
+    const satp = (getPAddr(table) >> 12) | satp_sv39;
+
+    util.csrWrite("satp", satp);
+
+    util.sfenceVma();
+
+    root_table = table;
+}
+
+pub fn setupMemory() void {
+    console.print("setting up memory...", .{});
+
+    virtual_diff = root.memory_info.virtual_diff;
+    alloc_start = @intFromPtr(&__virtual_end);
+    const alloc_start_physical = alloc_start - root.memory_info.virtual_diff;
+    root_table = root.memory_info.table_root;
 
     var memory_order: u6 = 0;
     while ((@as(usize, 1) << memory_order) * min_allocation + alloc_start_physical < ram_end) {
@@ -154,13 +263,5 @@ pub fn setupMemory() void {
     };
 
     buildInitialTree();
-
-    for (0..5) |_| {
-        const addr = alloc([3]pagetable.PageTable) catch |err| {
-            console.print("got an error: {}", .{err});
-            return;
-        };
-
-        console.print("addr: {x}\n", .{@intFromPtr(addr)});
-    }
+    setupPagetables() catch {};
 }

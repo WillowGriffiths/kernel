@@ -20,11 +20,15 @@ SECTIONS
     }
 
     __boot_end = .;
-    . = 0xffffffff80000000;
-    __kernel_start = . - DIFF;
-    __virtual_start = .;
 
+    __boot_size = . - __boot_start;
+
+    . = 0xffffffff80000000 + __boot_size;
     DIFF = . - __boot_end;
+
+    __kernel_start = . - DIFF;
+    __virtual_start = . - __boot_size;
+    __virtual_kernel_start = .;
 
     .text : AT(. - DIFF) {
         *(.text*) 
@@ -54,6 +58,9 @@ SECTIONS
         . += 4K * 8;
         __stack_start = .;
     }
+
+    . = ALIGN(4K);
+    __virtual_end = .;
 
     __kernel_end = . - DIFF;
 

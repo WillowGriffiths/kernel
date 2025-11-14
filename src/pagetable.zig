@@ -23,8 +23,8 @@ pub const PageTableEntry = packed struct(u64) {
         return @bitCast(((physical_address >> 12) << 10) | @as(u10, @bitCast(flags)));
     }
 
-    pub inline fn get_addr(self: *PageTableEntry) *align(0x1000) anyopaque {
-        return @ptrFromInt(@as(u64, self.ppn) << 12);
+    pub inline fn get_addr(self: *PageTableEntry) usize {
+        return @as(usize, self.ppn) << 12;
     }
 };
 
@@ -35,5 +35,5 @@ pub const MemoryInfo = extern struct {
     kernel_pages: u64,
     virtual_start: u64,
     virtual_diff: u64,
-    table_root: *PageTable,
+    table_root: *align(0x1000) PageTable,
 };
