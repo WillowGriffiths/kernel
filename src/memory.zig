@@ -289,9 +289,4 @@ pub fn setupMemory() void {
 
     buildInitialTree();
     setupPagetables() catch {};
-
-    const table = makeTable() catch {
-        return;
-    };
-    console.print("{x}\n", .{@intFromPtr(table)});
 }

@@ -44,6 +44,12 @@ export fn main() noreturn {
 
     memory.setupMemory();
 
+    const harts = 4;
+
+    for (0..harts) |i| {
+        console.print("Hart {}: {}\n", .{ i, sbi.sbiHartGetStatus(i) });
+    }
+
     console.print("waiting for interrupts...\n", .{});
     while (true) {
         asm volatile ("wfi");

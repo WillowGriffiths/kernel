@@ -11,6 +11,9 @@ const SBI_DBCN_CONSOLE_WRITE_BYTE = 2;
 const SBI_SRST = 0x53525354;
 const SBI_SRST_SYSTEM_RESET = 0;
 
+const SBI_HSM = 0x48534D;
+const SBI_HSM_HART_GET_STATUS = 2;
+
 const SbiError = enum(i64) {
     SBI_SUCCESS = 0,
     SBI_ERR_FAILED = -1,
@@ -31,19 +34,10 @@ const SbiError = enum(i64) {
 
 const SbiValue = extern union { value: i64, uvalue: u64 };
 
-const SbiRet = extern struct {
-    err: SbiError,
-    value: SbiValue,
-};
-
-inline fn sbiCall5(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: anytype, arg3: anytype, arg4: anytype) SbiRet {
-    var ret: SbiRet = undefined;
-
-    asm volatile (
+inline fn sbiCall5(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: anytype, arg3: anytype, arg4: anytype) SbiValue {
+    return @bitCast(asm volatile (
         \\ ecall
-        \\ sd a0, 0(t0)
-        \\ sd a1, 4(t0)
-        :
+        : [ret] "={a1}" (-> u64),
         : [arg0] "{a0}" (arg0),
           [arg1] "{a1}" (arg1),
           [arg2] "{a2}" (arg2),
@@ -51,26 +45,23 @@ inline fn sbiCall5(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: 
           [arg4] "{a4}" (arg4),
           [fid] "{a6}" (fid),
           [edid] "{a7}" (edid),
-          [ret] "{t0}" (&ret),
           // a0 and a1
-        : .{ .x10 = true, .x11 = true });
-
-    return ret;
+        : .{ .x10 = true, .x11 = true, .memory = true }));
 }
 
-inline fn sbiCall1(edid: usize, fid: usize, arg0: anytype) SbiRet {
+inline fn sbiCall1(edid: usize, fid: usize, arg0: anytype) SbiValue {
     return sbiCall5(edid, fid, arg0, 0, 0, 0, 0);
 }
 
-inline fn sbiCall2(edid: usize, fid: usize, arg0: anytype, arg1: anytype) SbiRet {
+inline fn sbiCall2(edid: usize, fid: usize, arg0: anytype, arg1: anytype) SbiValue {
     return sbiCall5(edid, fid, arg0, arg1, 0, 0, 0);
 }
 
-inline fn sbiCall3(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: anytype) SbiRet {
+inline fn sbiCall3(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: anytype) SbiValue {
     return sbiCall5(edid, fid, arg0, arg1, arg2, 0, 0);
 }
 
-inline fn sbiCall4(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: anytype, arg3: anytype) SbiRet {
+inline fn sbiCall4(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: anytype, arg3: anytype) SbiValue {
     return sbiCall5(edid, fid, arg0, arg1, arg2, arg3, 0);
 }
 
@@ -96,6 +87,23 @@ pub const SbiSrstResetReason = enum(u32) {
     NoReason = 0,
     SystemFailure = 1,
 };
+
 pub fn sbiSystemReset(reset_type: SbiSrstResetType, reset_reason: SbiSrstResetReason) void {
     _ = sbiCall2(SBI_SRST, SBI_SRST_SYSTEM_RESET, reset_type, reset_reason);
+}
+
+pub const SbiHartState = enum(u64) {
+    Started = 0,
+    Stopped = 1,
+    StartPending = 2,
+    StopPending = 3,
+    Suspended = 4,
+    SuspendPending = 5,
+    ResumePending = 6,
+};
+
+pub fn sbiHartGetStatus(hartId: u64) SbiHartState {
+    const ret = sbiCall1(SBI_HSM, SBI_HSM_HART_GET_STATUS, hartId);
+
+    return @enumFromInt(ret.uvalue);
 }
