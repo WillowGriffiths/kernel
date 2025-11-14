@@ -60,6 +60,8 @@ export fn main() noreturn {
 
     memory.setupMemory();
 
+    console.print("\n\n", .{});
+
     const harts = 4;
 
     for (0..harts) |i| {
@@ -67,6 +69,8 @@ export fn main() noreturn {
     }
 
     console.print("Current Hart: {}\n", .{hartId()});
+
+    console.print("\n", .{});
 
     console.print("shutting down in 5 seconds...\n", .{});
     while (true) {
