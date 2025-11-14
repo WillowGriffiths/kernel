@@ -6,13 +6,23 @@ const console = @import("console.zig");
 
 pub export var memory_info: pagetable.MemoryInfo = undefined;
 
+var seconds: usize = 5;
+
 fn interrupt_handler() align(4) callconv(.{ .riscv64_interrupt = .{ .mode = .supervisor } }) void {
     const sip = util.csrRead("sip");
 
     if ((sip >> 5) & 1 == 1) {
+        seconds -= 1;
+        if (seconds > 0) {
+            console.print("{} seconds remaining\n", .{seconds});
+        } else {
+            console.print("shutting down...\n", .{});
+
+            sbi.sbiSystemReset(.Shutdown, .NoReason);
+        }
+
         util.csrClear("sip", 32);
         sbi.sbiSetTimer(util.readTime() + 10000000);
-        console.print("Timer!\n", .{});
     } else {
         util.csrClear("sie", 0x20);
         util.csrClear("sip", 0x2);
@@ -58,7 +68,7 @@ export fn main() noreturn {
 
     console.print("Current Hart: {}\n", .{hartId()});
 
-    console.print("waiting for interrupts...\n", .{});
+    console.print("shutting down in 5 seconds...\n", .{});
     while (true) {
         asm volatile ("wfi");
     }
