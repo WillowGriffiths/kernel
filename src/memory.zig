@@ -39,12 +39,13 @@ const ram_start = 0x80000000;
 const ram_end = 0x87ffffff;
 const virtual_ram_start = 0xffffffd600000000;
 
-var root_table: *align(4096) pagetable.PageTable = undefined;
 var max_order: usize = undefined;
+var virtual_diff: usize = undefined;
+
 var alloc_start: usize = undefined;
 var root_node: MemoryNodeChild = undefined;
 var memory_page: *align(4096) MemoryHeader = undefined;
-var virtual_diff: usize = undefined;
+var root_table: *align(4096) pagetable.PageTable = undefined;
 
 extern const __virtual_end: anyopaque;
 extern const __virtual_kernel_start: anyopaque;
@@ -205,6 +206,32 @@ fn map(level2_table: *align(0x1000) pagetable.PageTable, va: usize, pa: usize) !
     level0_table[level0_index] = pagetable.PageTableEntry.create(.Leaf, pa);
 }
 
+inline fn fixRef(ref: *anyopaque) *anyopaque {
+    return @ptrFromInt(@intFromPtr(ref) - root.memory_info.virtual_diff + virtual_diff);
+}
+
+fn fixMemoryTree(node: *MemoryNodeChild) void {
+    switch (node.*) {
+        .child => {
+            node.child = @ptrCast(@alignCast(fixRef(node.child)));
+
+            fixMemoryTree(&node.child.left);
+            fixMemoryTree(&node.child.right);
+        },
+        else => {},
+    }
+}
+
+fn fixRefs() void {
+    virtual_diff = virtual_ram_start - ram_start;
+
+    alloc_start = @intFromPtr(fixRef(@ptrFromInt(alloc_start)));
+    root_table = @ptrCast(@alignCast(fixRef(root_table)));
+    memory_page = @ptrCast(@alignCast(fixRef(memory_page)));
+
+    fixMemoryTree(&root_node);
+}
+
 fn setupPagetables() !void {
     const table = try makeTable();
 
@@ -217,7 +244,6 @@ fn setupPagetables() !void {
     }
 
     const ram_pages = (ram_end - ram_start) / 0x1000 + 1;
-    console.print("{x}\n", .{ram_pages});
     for (0..ram_pages) |i| {
         const va = virtual_ram_start + i * 0x1000;
         const pa = ram_start + i * 0x1000;
@@ -239,11 +265,10 @@ fn setupPagetables() !void {
     util.sfenceVma();
 
     root_table = table;
+    fixRefs();
 }
 
 pub fn setupMemory() void {
-    console.print("setting up memory...", .{});
-
     virtual_diff = root.memory_info.virtual_diff;
     alloc_start = @intFromPtr(&__virtual_end);
     const alloc_start_physical = alloc_start - root.memory_info.virtual_diff;
@@ -264,4 +289,9 @@ pub fn setupMemory() void {
 
     buildInitialTree();
     setupPagetables() catch {};
+
+    const table = makeTable() catch {
+        return;
+    };
+    console.print("{x}\n", .{@intFromPtr(table)});
 }

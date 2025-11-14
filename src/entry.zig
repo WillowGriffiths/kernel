@@ -108,6 +108,7 @@ export fn init_pagetables() void {
         .kernel_start = kernel_start,
         .kernel_pages = kernel_pages,
         .virtual_diff = virtual_start - boot_start,
+        .boot_start = boot_start,
         .table_root = @alignCast(&__boot_page_tables[0]),
     };
 }
