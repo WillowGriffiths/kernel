@@ -10,6 +10,7 @@ extern var __boot_page_tables: [5]pagetable.PageTable;
 
 export fn _start() callconv(.naked) noreturn {
     asm volatile (
+        \\ mv tp, a0
         \\ la sp, __boot_stack_start
         \\ call init_pagetables
         \\

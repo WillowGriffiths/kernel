@@ -38,6 +38,12 @@ fn enableTimer() void {
     util.csrSet("sie", 0x20);
 }
 
+fn hartId() u64 {
+    return asm volatile ("mv %[ret],tp"
+        : [ret] "=r" (-> u64),
+    );
+}
+
 export fn main() noreturn {
     enableInterrupts();
     enableTimer();
@@ -49,6 +55,8 @@ export fn main() noreturn {
     for (0..harts) |i| {
         console.print("Hart {}: {}\n", .{ i, sbi.sbiHartGetStatus(i) });
     }
+
+    console.print("Current Hart: {}\n", .{hartId()});
 
     console.print("waiting for interrupts...\n", .{});
     while (true) {
