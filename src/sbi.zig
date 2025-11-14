@@ -11,49 +11,79 @@ const SBI_DBCN_CONSOLE_WRITE_BYTE = 2;
 const SBI_SRST = 0x53525354;
 const SBI_SRST_SYSTEM_RESET = 0;
 
-inline fn sbiCall1(edid: usize, fid: usize, arg0: anytype) void {
-    asm volatile ("ecall"
-        :
-        : [arg0] "{a0}" (arg0),
-          [fid] "{a6}" (fid),
-          [edid] "{a7}" (edid),
-          // a0 and a1
-        : .{ .x10 = true, .x11 = true });
-}
+const SbiError = enum(i64) {
+    SBI_SUCCESS = 0,
+    SBI_ERR_FAILED = -1,
+    SBI_ERR_NOT_SUPPORTED = -2,
+    SBI_ERR_INVALID_PARAM = -3,
+    SBI_ERR_DENIED = -4,
+    SBI_ERR_INVALID_ADDRESS = -5,
+    SBI_ERR_ALREADY_AVAILABLE = -6,
+    SBI_ERR_ALREADY_STARTED = -7,
+    SBI_ERR_ALREADY_STOPPED = -8,
+    SBI_ERR_NO_SHMEM = -9,
+    SBI_ERR_INVALID_STATE = -10,
+    SBI_ERR_BAD_RANGE = -11,
+    SBI_ERR_TIMEOUT = -12,
+    SBI_ERR_IO = -13,
+    SBI_ERR_DENIED_LOCKED = -14,
+};
 
-inline fn sbiCall2(edid: usize, fid: usize, arg0: anytype, arg1: anytype) void {
-    asm volatile ("ecall"
-        :
-        : [arg0] "{a0}" (arg0),
-          [arg1] "{a1}" (arg1),
-          [fid] "{a6}" (fid),
-          [edid] "{a7}" (edid),
-          // a0 and a1
-        : .{ .x10 = true, .x11 = true });
-}
+const SbiValue = extern union { value: i64, uvalue: u64 };
 
-inline fn sbiCall3(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: anytype) void {
-    asm volatile ("ecall"
+const SbiRet = extern struct {
+    err: SbiError,
+    value: SbiValue,
+};
+
+inline fn sbiCall5(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: anytype, arg3: anytype, arg4: anytype) SbiRet {
+    var ret: SbiRet = undefined;
+
+    asm volatile (
+        \\ ecall
+        \\ sd a0, 0(t0)
+        \\ sd a1, 4(t0)
         :
         : [arg0] "{a0}" (arg0),
           [arg1] "{a1}" (arg1),
           [arg2] "{a2}" (arg2),
+          [arg3] "{a3}" (arg3),
+          [arg4] "{a4}" (arg4),
           [fid] "{a6}" (fid),
           [edid] "{a7}" (edid),
+          [ret] "{t0}" (&ret),
           // a0 and a1
         : .{ .x10 = true, .x11 = true });
+
+    return ret;
+}
+
+inline fn sbiCall1(edid: usize, fid: usize, arg0: anytype) SbiRet {
+    return sbiCall5(edid, fid, arg0, 0, 0, 0, 0);
+}
+
+inline fn sbiCall2(edid: usize, fid: usize, arg0: anytype, arg1: anytype) SbiRet {
+    return sbiCall5(edid, fid, arg0, arg1, 0, 0, 0);
+}
+
+inline fn sbiCall3(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: anytype) SbiRet {
+    return sbiCall5(edid, fid, arg0, arg1, arg2, 0, 0);
+}
+
+inline fn sbiCall4(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: anytype, arg3: anytype) SbiRet {
+    return sbiCall5(edid, fid, arg0, arg1, arg2, arg3, 0);
 }
 
 pub fn sbiDebugConsoleWrite(text: []const u8) void {
-    sbiCall3(SBI_DBCN, SBI_DBCN_CONSOLE_WRITE, text.len, text.ptr - root.memory_info.virtual_diff, 0x0);
+    _ = sbiCall3(SBI_DBCN, SBI_DBCN_CONSOLE_WRITE, text.len, text.ptr - root.memory_info.virtual_diff, 0x0);
 }
 
 pub fn sbiDebugConsoleWriteByte(byte: u8) void {
-    sbiCall1(SBI_DBCN, SBI_DBCN_CONSOLE_WRITE_BYTE, byte);
+    _ = sbiCall1(SBI_DBCN, SBI_DBCN_CONSOLE_WRITE_BYTE, byte);
 }
 
 pub fn sbiSetTimer(value: u64) void {
-    sbiCall1(SBI_TIME, SBI_TIME_SET_TIMER, value);
+    _ = sbiCall1(SBI_TIME, SBI_TIME_SET_TIMER, value);
 }
 
 pub const SbiSrstResetType = enum(u32) {
@@ -67,5 +97,5 @@ pub const SbiSrstResetReason = enum(u32) {
     SystemFailure = 1,
 };
 pub fn sbiSystemReset(reset_type: SbiSrstResetType, reset_reason: SbiSrstResetReason) void {
-    sbiCall2(SBI_SRST, SBI_SRST_SYSTEM_RESET, reset_type, reset_reason);
+    _ = sbiCall2(SBI_SRST, SBI_SRST_SYSTEM_RESET, reset_type, reset_reason);
 }
