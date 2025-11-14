@@ -1,5 +1,6 @@
 const root = @import("root");
 const console = @import("console.zig");
+const memory = @import("memory.zig");
 
 const SBI_TIME = 0x54494D45;
 const SBI_TIME_SET_TIMER = 0;
@@ -66,7 +67,8 @@ inline fn sbiCall4(edid: usize, fid: usize, arg0: anytype, arg1: anytype, arg2: 
 }
 
 pub fn sbiDebugConsoleWrite(text: []const u8) void {
-    _ = sbiCall3(SBI_DBCN, SBI_DBCN_CONSOLE_WRITE, text.len, text.ptr - root.memory_info.virtual_diff, 0x0);
+    const addr = memory.getPAddr(@ptrCast(text.ptr));
+    _ = sbiCall3(SBI_DBCN, SBI_DBCN_CONSOLE_WRITE, text.len, addr, 0x0);
 }
 
 pub fn sbiDebugConsoleWriteByte(byte: u8) void {

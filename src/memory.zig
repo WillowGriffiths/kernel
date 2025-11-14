@@ -163,7 +163,7 @@ fn getVAddr(pa: usize) *anyopaque {
     );
 }
 
-fn getPAddr(addr: *anyopaque) usize {
+pub fn getPAddr(addr: *const anyopaque) usize {
     const va = @intFromPtr(addr);
 
     const level2_index = (va >> 30) & 0b111111111;
