@@ -13,6 +13,7 @@ const SBI_SRST = 0x53525354;
 const SBI_SRST_SYSTEM_RESET = 0;
 
 const SBI_HSM = 0x48534D;
+const SBI_HSM_HART_START = 0;
 const SBI_HSM_HART_GET_STATUS = 2;
 
 const SbiError = enum(i64) {
@@ -103,6 +104,10 @@ pub const SbiHartState = enum(u64) {
     SuspendPending = 5,
     ResumePending = 6,
 };
+
+pub fn sbiHartStart(hart_id: u64, start_addr: u64, arg: u64) void {
+    _ = sbiCall3(SBI_HSM, SBI_HSM_HART_START, hart_id, start_addr, arg);
+}
 
 pub fn sbiHartGetStatus(hartId: u64) SbiHartState {
     const ret = sbiCall1(SBI_HSM, SBI_HSM_HART_GET_STATUS, hartId);

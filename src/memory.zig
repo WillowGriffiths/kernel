@@ -124,9 +124,7 @@ fn makeAllocation(node: *MemoryNodeChild, order: usize, node_order: usize, addr:
     }
 }
 
-pub fn alloc(t: type) !*align(0x1000) t {
-    const size = @sizeOf(t);
-
+pub fn allocSize(size: usize) !*align(0x1000) anyopaque {
     var order: u6 = 0;
     while ((@as(usize, 1) << order) * min_allocation < size) {
         order += 1;
@@ -138,6 +136,12 @@ pub fn alloc(t: type) !*align(0x1000) t {
 
     const allocation = try makeAllocation(&root_node, order, max_order, alloc_start, null);
     return @ptrFromInt(allocation orelse return AllocationError.AllocationFailed);
+}
+
+pub fn alloc(t: type) !*align(0x1000) t {
+    const size = @sizeOf(t);
+
+    return @ptrCast(try allocSize(size));
 }
 
 const MapError = error{
@@ -289,4 +293,19 @@ pub fn setupMemory() void {
 
     buildInitialTree();
     setupPagetables() catch {};
+}
+
+pub fn getPagetableAddr() usize {
+    return getPAddr(root_table);
+}
+
+pub fn setupHartMemory(pagetable_addr: usize) void {
+    util.sfenceVma();
+
+    const satp_sv39 = 8 << 60;
+    const satp = (pagetable_addr >> 12) | satp_sv39;
+
+    util.csrWrite("satp", satp);
+
+    util.sfenceVma();
 }

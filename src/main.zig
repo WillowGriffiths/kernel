@@ -3,8 +3,9 @@ const sbi = @import("sbi.zig");
 const pagetable = @import("pagetable.zig");
 const memory = @import("memory.zig");
 const console = @import("console.zig");
+const init = @import("init.zig");
 
-pub export var memory_info: pagetable.MemoryInfo = undefined;
+pub export var memory_info: init.MemoryInfo = undefined;
 
 var seconds: usize = 5;
 
@@ -54,25 +55,68 @@ fn hartId() u64 {
     );
 }
 
-export fn main() noreturn {
-    enableInterrupts();
-    enableTimer();
+comptime {
+    asm (
+        \\.globl secondaryMain
+        \\.type secondaryMain,@function
+        \\secondaryMain:
+        \\   // enable paging with the pagetable address stored in a0 
+        \\   srli t0, a0, 12
+        \\
+        \\   li t1, 8
+        \\   slli t1, t1, 60
+        \\
+        \\   or t0, t0, t1
+        \\   
+        \\   csrw satp, t0
+        \\
+        \\   sfence.vma zero, zero
+        \\
+        \\   mv sp,a1
+        \\   mv a0,x0
+        \\
+        \\   call main
+    );
+}
 
-    memory.setupMemory();
+const harts = 4;
 
-    console.print("\n\n", .{});
+fn initHarts() void {
+    const stacks_size = 4096 * 8 * (harts - 1);
+    const stacks: *[harts - 1][4096 * 8]u8 = @ptrCast(memory.allocSize(stacks_size) catch @trap());
 
-    const harts = 4;
-
-    for (0..harts) |i| {
-        console.print("Hart {}: {}\n", .{ i, sbi.sbiHartGetStatus(i) });
+    var init_infos: *[harts - 1]init.InitInfo = @ptrCast(memory.allocSize(@sizeOf(init.InitInfo) * (harts - 1)) catch @trap());
+    for (0..harts - 1) |i| {
+        init_infos[i].pagetable_addr = memory.getPagetableAddr();
+        init_infos[i].stack_addr = @intFromPtr(&stacks[i]);
     }
 
-    console.print("Current Hart: {}\n", .{hartId()});
+    console.print("Boot Hart: {}\n", .{hartId()});
 
-    console.print("\n", .{});
+    for (0..harts) |i| {
+        if (i != hartId()) {
+            const info_index = if (i <= hartId()) i else i - 1;
+            const info_addr = memory.getPAddr(&init_infos[info_index]);
 
-    console.print("shutting down in 5 seconds...\n", .{});
+            sbi.sbiHartStart(i, memory_info.start_addr, info_addr);
+        }
+    }
+}
+
+export fn main(boot_hart: bool) noreturn {
+    enableInterrupts();
+
+    if (boot_hart) {
+        memory.setupMemory();
+        initHarts();
+
+        enableTimer();
+
+        console.print("shutting down in 5 seconds...\n", .{});
+    } else {
+        console.print("hello from hart {}!\n", .{hartId()});
+    }
+
     while (true) {
         asm volatile ("wfi");
     }

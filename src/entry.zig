@@ -1,4 +1,5 @@
 const pagetable = @import("pagetable.zig");
+const init = @import("init.zig");
 
 extern const __boot_start: anyopaque;
 extern const __boot_end: anyopaque;
@@ -6,19 +7,55 @@ extern const __boot_end: anyopaque;
 extern const __kernel_start: anyopaque;
 extern const __kernel_end: anyopaque;
 
+extern const _secondaryStart: anyopaque;
+
 extern var __boot_page_tables: [5]pagetable.PageTable;
 
-export fn _start() callconv(.naked) noreturn {
-    asm volatile (
-        \\ mv tp, a0
-        \\ la sp, __boot_stack_start
-        \\ call init_pagetables
+export const message = [6]u8{ 'h', 'e', 'l', 'l', 'o', '\n' };
+
+comptime {
+    asm (
+        \\ .globl _start
+        \\ .type _start,@function
+        \\ _start:
+        \\   mv tp, a0
+        \\   
+        \\   la sp, __boot_stack_start
         \\
-        \\ lui sp,%hi(__stack_start)
-        \\ addi sp,sp,%lo(__stack_start)
+        \\   call init_pagetables
         \\
-        \\ lui a1,%hi(main)
-        \\ jalr ra,%lo(main)(a1)
+        \\   lui sp,%hi(__stack_start)
+        \\   addi sp,sp,%lo(__stack_start)
+        \\  
+        \\   li a0,1
+        \\   lui t0,%hi(main)
+        \\   jalr ra,%lo(main)(t0)
+        \\
+        \\ .global _secondaryStart
+        \\ .type _secondaryStart,@function
+        \\ _secondaryStart:
+        \\   mv tp, a0
+        \\
+        \\   // copy init info to registers before enabling paging
+        \\   ld a0, 0(a1)
+        \\   ld a1, 8(a1)
+        \\
+        \\   // enable paging with __boot_page_tables[0]
+        \\   la t0, __boot_page_tables
+        \\   srli t0, t0, 12
+        \\
+        \\   li t1, 8
+        \\   slli t1, t1, 60
+        \\
+        \\   or t0, t0, t1
+        \\   
+        \\   csrw satp, t0
+        \\
+        \\   sfence.vma zero, zero
+        \\
+        \\   // jump to the secondary hart entry point
+        \\   lui t0,%hi(secondaryMain)
+        \\   jalr ra,%lo(secondaryMain)(t0)
     );
 }
 
@@ -102,8 +139,9 @@ export fn init_pagetables() void {
     const kernel_end = @intFromPtr(&__kernel_end);
     const virtual_start = getFarAddr("__virtual_start");
     const kernel_pages = (kernel_end - kernel_start) / 4096 + 1;
+    const start_addr = @intFromPtr(&_secondaryStart);
 
-    const memory_info: *volatile pagetable.MemoryInfo = @ptrFromInt(getFarAddr("memory_info"));
+    const memory_info: *volatile init.MemoryInfo = @ptrFromInt(getFarAddr("memory_info"));
     memory_info.* = .{
         .virtual_start = virtual_start,
         .kernel_start = kernel_start,
@@ -111,5 +149,6 @@ export fn init_pagetables() void {
         .virtual_diff = virtual_start - boot_start,
         .boot_start = boot_start,
         .table_root = @alignCast(&__boot_page_tables[0]),
+        .start_addr = start_addr,
     };
 }
