@@ -9,6 +9,8 @@ pub export var memory_info: init.MemoryInfo = undefined;
 
 var seconds: usize = 5;
 
+const message = @embedFile("./message.txt");
+
 fn interrupt_handler() align(4) callconv(.{ .riscv64_interrupt = .{ .mode = .supervisor } }) void {
     const sip = util.csrRead("sip");
 
@@ -108,6 +110,8 @@ export fn main(boot_hart: bool) noreturn {
 
     if (boot_hart) {
         memory.setupMemory();
+        console.print("{s}", .{message});
+
         initHarts();
 
         enableTimer();
