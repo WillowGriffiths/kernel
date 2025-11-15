@@ -14,7 +14,7 @@ const message = @embedFile("./message.txt");
 fn interrupt_handler() align(4) callconv(.{ .riscv64_interrupt = .{ .mode = .supervisor } }) void {
     const sip = util.csrRead("sip");
 
-    if ((sip >> 5) & 1 == 1) {
+    if ((sip >> 5) & 1 == 1) { // timer interrupt
         seconds -= 1;
         if (seconds > 0) {
             console.print("{} seconds remaining\n", .{seconds});
