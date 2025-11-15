@@ -2,6 +2,7 @@ const root = @import("root");
 const pagetable = @import("pagetable.zig");
 const util = @import("util.zig");
 const console = @import("console.zig");
+const spinlock = @import("spinlock.zig");
 
 const max_nodes = (0x1000 - @sizeOf(MemoryHeader)) / @sizeOf(MemoryNode);
 
@@ -124,7 +125,12 @@ fn makeAllocation(node: *MemoryNodeChild, order: usize, node_order: usize, addr:
     }
 }
 
+var alloc_lock = spinlock.SpinLock{};
+
 pub fn allocSize(size: usize) !*align(0x1000) anyopaque {
+    alloc_lock.acquire();
+    defer alloc_lock.release();
+
     var order: u6 = 0;
     while ((@as(usize, 1) << order) * min_allocation < size) {
         order += 1;
@@ -135,6 +141,7 @@ pub fn allocSize(size: usize) !*align(0x1000) anyopaque {
     }
 
     const allocation = try makeAllocation(&root_node, order, max_order, alloc_start, null);
+
     return @ptrFromInt(allocation orelse return AllocationError.AllocationFailed);
 }
 
@@ -185,7 +192,12 @@ pub fn getPAddr(addr: *const anyopaque) usize {
     return base_addr + offset;
 }
 
+var map_lock = spinlock.SpinLock{};
+
 fn map(level2_table: *align(0x1000) pagetable.PageTable, va: usize, pa: usize) !void {
+    map_lock.acquire();
+    defer map_lock.release();
+
     const level2_index = (va >> 30) & 0b111111111;
     const level1_index = (va >> 21) & 0b111111111;
     const level0_index = (va >> 12) & 0b111111111;
